@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react'
+
 import {
   Search,
   Sparkles,
@@ -16,12 +17,12 @@ import {
   Eye,
   CircleHelp,
   WandSparkles,
-  Layers3,
-  ChevronDown
+  Layers3
 } from 'lucide-react'
 
 import { demoPhotos, demoTasks } from './data/photos'
 import { generatedPhotos } from './data/generatedPhotos'
+
 import {
   aiSearch,
   extractClues,
@@ -30,9 +31,12 @@ import {
   moreLikeThis
 } from './lib/search'
 
-const libraryPhotos = generatedPhotos.length
-  ? generatedPhotos
-  : demoPhotos
+
+const libraryPhotos =
+  generatedPhotos.length
+    ? generatedPhotos
+    : demoPhotos
+
 
 const NAV = [
   {
@@ -52,15 +56,12 @@ const NAV = [
   }
 ]
 
-const certaintyLabel = {
-  certain: 'Certain',
-  approximate: 'Approximate',
-  guess: 'Guess',
-  unknown: 'Unknown'
-}
 
 function seconds(ms) {
-  const s = Math.max(0, Math.round(ms / 1000))
+  const s = Math.max(
+    0,
+    Math.round(ms / 1000)
+  )
 
   return s < 60
     ? `${s}s`
@@ -69,7 +70,8 @@ function seconds(ms) {
 
 
 /* =========================================================
-   GOOGLE PHOTOS STYLE LOGO
+   GOOGLE PHOTOS STYLE PINWHEEL
+   No external image file required
    ========================================================= */
 
 function GooglePhotosLogo() {
@@ -77,25 +79,50 @@ function GooglePhotosLogo() {
     <svg
       className="gphotos-logo"
       viewBox="0 0 40 40"
-      aria-hidden="true"
+      role="img"
+      aria-label="Google Photos"
     >
+      {/* Red blade */}
       <path
-        d="M20 20V4a16 16 0 0 1 16 16H20Z"
+        d="
+          M20 20
+          L20 4
+          A8 8 0 0 1 20 20
+          Z
+        "
         fill="#EA4335"
       />
 
+      {/* Blue blade */}
       <path
-        d="M20 20h16a16 16 0 0 1-16 16V20Z"
+        d="
+          M20 20
+          L36 20
+          A8 8 0 0 1 20 20
+          Z
+        "
         fill="#4285F4"
       />
 
+      {/* Green blade */}
       <path
-        d="M20 20v16A16 16 0 0 1 4 20h16Z"
+        d="
+          M20 20
+          L20 36
+          A8 8 0 0 1 20 20
+          Z
+        "
         fill="#34A853"
       />
 
+      {/* Yellow blade */}
       <path
-        d="M20 20H4A16 16 0 0 1 20 4v16Z"
+        d="
+          M20 20
+          L4 20
+          A8 8 0 0 1 20 20
+          Z
+        "
         fill="#FBBC04"
       />
     </svg>
@@ -125,13 +152,15 @@ function App() {
 
   const [busy, setBusy] = useState(false)
 
-  const [clarification, setClarification] = useState(null)
+  const [clarification, setClarification] =
+    useState(null)
 
   const [task, setTask] = useState(null)
 
   const [history, setHistory] = useState([])
 
-  const [showSession, setShowSession] = useState(false)
+  const [showSession, setShowSession] =
+    useState(false)
 
   const inputRef = useRef(null)
 
@@ -150,6 +179,7 @@ function App() {
       return libraryPhotos
     }
 
+
     return libraryPhotos.filter(photo => {
 
       const searchableText = `
@@ -167,7 +197,7 @@ function App() {
 
 
   /* =========================================================
-     ACTIVE MEMORY
+     CURRENT ACTIVE MEMORY
      ========================================================= */
 
   const activeText = useMemo(() => {
@@ -181,22 +211,26 @@ function App() {
 
 
   /* =========================================================
-     START TEST TASK
+     START RETRIEVAL TASK
      ========================================================= */
 
   const startTask = memory => {
 
     const now = Date.now()
 
+
     const newTask = {
 
       id: `task-${now}`,
 
-      startedAt: new Date(now).toISOString(),
+      startedAt:
+        new Date(now).toISOString(),
 
-      startedMs: now,
+      startedMs:
+        now,
 
-      startingMemory: memory,
+      startingMemory:
+        memory,
 
       events: [
         {
@@ -218,6 +252,7 @@ function App() {
 
       targetId: null
     }
+
 
     setTask(newTask)
 
@@ -253,17 +288,17 @@ function App() {
       return
     }
 
+
     setBusy(true)
 
     setProgress(null)
 
 
     /*
-      A completely different memory query starts
-      a NEW retrieval task.
+      Different text = new retrieval task.
 
-      Previous clues must not accidentally carry
-      into a new search.
+      This prevents clues from an old search
+      carrying into a new query.
     */
 
     const previousMemory =
@@ -271,16 +306,20 @@ function App() {
         ?.trim()
         .toLowerCase() || ''
 
+
     const isNewMemory =
       !nextClues &&
-      previousMemory !== text.toLowerCase()
+      previousMemory !==
+        text.toLowerCase()
 
 
     const currentClues =
       nextClues ||
       (
         isNewMemory
+
           ? extractClues(text)
+
           : (
               clues.length
                 ? clues
@@ -299,18 +338,25 @@ function App() {
 
       setClarification(null)
 
-    } else if (!clues.length && !nextClues) {
+    } else if (
+      !clues.length &&
+      !nextClues
+    ) {
 
       setClues(currentClues)
+
     }
 
 
-    const currentTask = isNewMemory
-      ? startTask(text)
-      : (
-          task ||
-          startTask(text)
-        )
+    const currentTask =
+      isNewMemory
+
+        ? startTask(text)
+
+        : (
+            task ||
+            startTask(text)
+          )
 
 
     const effective = [
@@ -331,14 +377,18 @@ function App() {
 
     try {
 
-      const ranked = await aiSearch(
-        effective,
-        libraryPhotos,
-        {
-          onStatus: setModelStatus,
-          onProgress: setProgress
-        }
-      )
+      const ranked =
+        await aiSearch(
+          effective,
+          libraryPhotos,
+          {
+            onStatus:
+              setModelStatus,
+
+            onProgress:
+              setProgress
+          }
+        )
 
 
       setResults(ranked)
@@ -356,23 +406,27 @@ function App() {
 
       const snapshot = {
 
-        at: new Date().toISOString(),
+        at:
+          new Date().toISOString(),
 
         reason,
 
-        query: effective,
+        query:
+          effective,
 
-        ids: ranked
-          .slice(0, 12)
-          .map(photo => photo.id),
+        ids:
+          ranked
+            .slice(0, 12)
+            .map(photo => photo.id),
 
-        scores: ranked
-          .slice(0, 12)
-          .map(photo =>
-            Number(
-              photo.score.toFixed(4)
+        scores:
+          ranked
+            .slice(0, 12)
+            .map(photo =>
+              Number(
+                photo.score.toFixed(4)
+              )
             )
-          )
       }
 
 
@@ -391,12 +445,15 @@ function App() {
 
       setTask(previous => {
 
-        const base = isNewMemory
-          ? currentTask
-          : (
-              previous ||
-              currentTask
-            )
+        const base =
+          isNewMemory
+
+            ? currentTask
+
+            : (
+                previous ||
+                currentTask
+              )
 
 
         return {
@@ -410,6 +467,7 @@ function App() {
 
           events: [
             ...(base.events || []),
+
             {
               type: 'candidate_set',
               ...snapshot
@@ -437,7 +495,9 @@ function App() {
     certainty = 'certain'
   ) {
 
-    const cleanValue = value.trim()
+    const cleanValue =
+      value.trim()
+
 
     if (!cleanValue) {
       return
@@ -446,15 +506,19 @@ function App() {
 
     const clue = {
 
-      id: `clue-${Date.now()}`,
+      id:
+        `clue-${Date.now()}`,
 
-      value: cleanValue,
+      value:
+        cleanValue,
 
       certainty,
 
-      source: 'recovered_memory',
+      source:
+        'recovered_memory',
 
-      enabled: true
+      enabled:
+        true
     }
 
 
@@ -476,9 +540,15 @@ function App() {
         ...current.refinements,
 
         {
-          at: new Date().toISOString(),
-          type: 'recovered_clue',
-          value: cleanValue,
+          at:
+            new Date().toISOString(),
+
+          type:
+            'recovered_clue',
+
+          value:
+            cleanValue,
+
           certainty
         }
 
@@ -489,9 +559,15 @@ function App() {
         ...current.events,
 
         {
-          type: 'recovered_clue',
-          at: new Date().toISOString(),
-          value: cleanValue,
+          type:
+            'recovered_clue',
+
+          at:
+            new Date().toISOString(),
+
+          value:
+            cleanValue,
+
           certainty
         }
 
@@ -514,33 +590,45 @@ function App() {
 
   function toggleClue(id) {
 
-    const next = clues.map(clue => {
+    const next =
+      clues.map(clue => {
 
-      return clue.id === id
-        ? {
-            ...clue,
-            enabled: !clue.enabled
-          }
-        : clue
+        return clue.id === id
 
-    })
+          ? {
+              ...clue,
+              enabled:
+                !clue.enabled
+            }
+
+          : clue
+
+      })
+
 
     setClues(next)
   }
 
 
-  function setCertainty(id, certainty) {
+  function setCertainty(
+    id,
+    certainty
+  ) {
 
-    const next = clues.map(clue => {
+    const next =
+      clues.map(clue => {
 
-      return clue.id === id
-        ? {
-            ...clue,
-            certainty
-          }
-        : clue
+        return clue.id === id
 
-    })
+          ? {
+              ...clue,
+              certainty
+            }
+
+          : clue
+
+      })
+
 
     setClues(next)
   }
@@ -550,7 +638,8 @@ function App() {
 
     setClues(
       clues.filter(
-        clue => clue.id !== id
+        clue =>
+          clue.id !== id
       )
     )
   }
@@ -572,6 +661,13 @@ function App() {
       }
 
 
+      const rank =
+        results.findIndex(
+          result =>
+            result.id === photo.id
+        ) + 1
+
+
       return {
 
         ...current,
@@ -581,13 +677,14 @@ function App() {
           ...current.photosOpened,
 
           {
-            id: photo.id,
-            at: new Date().toISOString(),
-            rank:
-              results.findIndex(
-                result =>
-                  result.id === photo.id
-              ) + 1
+            id:
+              photo.id,
+
+            at:
+              new Date()
+                .toISOString(),
+
+            rank
           }
 
         ],
@@ -597,14 +694,17 @@ function App() {
           ...current.events,
 
           {
-            type: 'photo_opened',
-            at: new Date().toISOString(),
-            id: photo.id,
-            rank:
-              results.findIndex(
-                result =>
-                  result.id === photo.id
-              ) + 1
+            type:
+              'photo_opened',
+
+            at:
+              new Date()
+                .toISOString(),
+
+            id:
+              photo.id,
+
+            rank
           }
 
         ]
@@ -628,14 +728,18 @@ function App() {
 
     try {
 
-      const ranked = await moreLikeThis(
-        photo,
-        libraryPhotos,
-        {
-          onStatus: setModelStatus,
-          onProgress: setProgress
-        }
-      )
+      const ranked =
+        await moreLikeThis(
+          photo,
+          libraryPhotos,
+          {
+            onStatus:
+              setModelStatus,
+
+            onProgress:
+              setProgress
+          }
+        )
 
 
       setResults(ranked)
@@ -650,9 +754,15 @@ function App() {
           ...current.refinements,
 
           {
-            at: new Date().toISOString(),
-            type: 'more_like_this',
-            photoId: photo.id
+            at:
+              new Date()
+                .toISOString(),
+
+            type:
+              'more_like_this',
+
+            photoId:
+              photo.id
           }
 
         ],
@@ -662,11 +772,19 @@ function App() {
           ...current.candidateSets,
 
           {
-            at: new Date().toISOString(),
-            reason: 'more_like_this',
-            ids: ranked
-              .slice(0, 12)
-              .map(item => item.id)
+            at:
+              new Date()
+                .toISOString(),
+
+            reason:
+              'more_like_this',
+
+            ids:
+              ranked
+                .slice(0, 12)
+                .map(
+                  item => item.id
+                )
           }
 
         ],
@@ -676,9 +794,15 @@ function App() {
           ...current.events,
 
           {
-            type: 'more_like_this',
-            at: new Date().toISOString(),
-            photoId: photo.id
+            type:
+              'more_like_this',
+
+            at:
+              new Date()
+                .toISOString(),
+
+            photoId:
+              photo.id
           }
 
         ]
@@ -695,7 +819,7 @@ function App() {
 
 
   /* =========================================================
-     AI CLARIFICATION
+     CLARIFICATION
      ========================================================= */
 
   function answerQuestion(answer) {
@@ -709,8 +833,13 @@ function App() {
         ...current.questions,
 
         {
-          at: new Date().toISOString(),
-          question: clarification.question,
+          at:
+            new Date()
+              .toISOString(),
+
+          question:
+            clarification.question,
+
           answer
         }
 
@@ -721,9 +850,16 @@ function App() {
         ...current.events,
 
         {
-          type: 'clarification_answered',
-          at: new Date().toISOString(),
-          question: clarification.question,
+          type:
+            'clarification_answered',
+
+          at:
+            new Date()
+              .toISOString(),
+
+          question:
+            clarification.question,
+
           answer
         }
 
@@ -737,10 +873,12 @@ function App() {
       setClarification(null)
 
       return
+
     }
 
 
     setClarification(null)
+
 
     addRecoveredClue(
       answer,
@@ -755,7 +893,8 @@ function App() {
 
   function confirmTarget(photo) {
 
-    const end = Date.now()
+    const end =
+      Date.now()
 
 
     patchTask(current => ({
@@ -763,10 +902,12 @@ function App() {
       ...current,
 
       completedAt:
-        new Date(end).toISOString(),
+        new Date(end)
+          .toISOString(),
 
       elapsedMs:
-        end - current.startedMs,
+        end -
+        current.startedMs,
 
       targetId:
         photo.id,
@@ -779,9 +920,13 @@ function App() {
         ...current.events,
 
         {
-          type: 'target_confirmed',
+          type:
+            'target_confirmed',
+
           at:
-            new Date(end).toISOString(),
+            new Date(end)
+              .toISOString(),
+
           photoId:
             photo.id
         }
@@ -803,7 +948,8 @@ function App() {
 
   function endNoMatch() {
 
-    const end = Date.now()
+    const end =
+      Date.now()
 
 
     patchTask(current => ({
@@ -811,10 +957,12 @@ function App() {
       ...current,
 
       completedAt:
-        new Date(end).toISOString(),
+        new Date(end)
+          .toISOString(),
 
       elapsedMs:
-        end - current.startedMs,
+        end -
+        current.startedMs,
 
       outcome:
         'no_confirmed_match',
@@ -824,9 +972,13 @@ function App() {
         ...current.events,
 
         {
-          type: 'task_ended',
+          type:
+            'task_ended',
+
           at:
-            new Date(end).toISOString(),
+            new Date(end)
+              .toISOString(),
+
           outcome:
             'no_confirmed_match'
         }
@@ -841,7 +993,7 @@ function App() {
 
 
   /* =========================================================
-     RESET TASK
+     RESET
      ========================================================= */
 
   function resetTask() {
@@ -919,27 +1071,32 @@ function App() {
     }
 
 
-    const blob = new Blob(
+    const blob =
+      new Blob(
 
-      [
-        JSON.stringify(
-          {
-            ...task,
-            elapsedMs:
-              task.elapsedMs ||
-              Date.now() -
-                task.startedMs
-          },
-          null,
-          2
-        )
-      ],
+        [
+          JSON.stringify(
+            {
+              ...task,
 
-      {
-        type: 'application/json'
-      }
+              elapsedMs:
+                task.elapsedMs ||
+                Date.now() -
+                  task.startedMs
+            },
 
-    )
+            null,
+
+            2
+          )
+        ],
+
+        {
+          type:
+            'application/json'
+        }
+
+      )
 
 
     const url =
@@ -950,7 +1107,8 @@ function App() {
       document.createElement('a')
 
 
-    anchor.href = url
+    anchor.href =
+      url
 
 
     anchor.download =
@@ -965,7 +1123,7 @@ function App() {
 
 
   /* =========================================================
-     GROUP PHOTO LIBRARY
+     GROUP PHOTOS
      ========================================================= */
 
   const grouped = useMemo(() => {
@@ -975,19 +1133,20 @@ function App() {
 
     libraryPhotos.forEach(photo => {
 
-      const month = photo.taken
+      const month =
+        photo.taken
 
-        ? new Date(
-            photo.taken
-          ).toLocaleDateString(
-            'en-US',
-            {
-              month: 'long',
-              year: 'numeric'
-            }
-          )
+          ? new Date(
+              photo.taken
+            ).toLocaleDateString(
+              'en-US',
+              {
+                month: 'long',
+                year: 'numeric'
+              }
+            )
 
-        : 'Project photo library'
+          : 'Project photo library'
 
 
       ;(map[month] ||= [])
@@ -1002,7 +1161,7 @@ function App() {
 
 
   /* =========================================================
-     APP UI
+     MAIN UI
      ========================================================= */
 
   return (
@@ -1011,10 +1170,11 @@ function App() {
 
 
       {/* =========================
-          GOOGLE PHOTOS HEADER
+          TOP HEADER
           ========================= */}
 
       <header className="topbar">
+
 
         <button
           className="brand google-brand"
@@ -1026,22 +1186,32 @@ function App() {
 
           <GooglePhotosLogo />
 
+
           <span className="brand-copy">
 
+
             <span className="google-photos-name">
+
               Google Photos
+
             </span>
+
 
             <span className="prototype-note">
+
               Research prototype
+
             </span>
 
+
           </span>
+
 
         </button>
 
 
         <nav className="nav">
+
 
           {NAV.map(
             ({
@@ -1073,6 +1243,7 @@ function App() {
             )
           )}
 
+
         </nav>
 
 
@@ -1086,6 +1257,7 @@ function App() {
 
         </div>
 
+
       </header>
 
 
@@ -1093,7 +1265,7 @@ function App() {
 
 
         {/* =====================================================
-            PHOTOS TAB
+            PHOTOS
             ===================================================== */}
 
         {view === 'photos' && (
@@ -1106,16 +1278,18 @@ function App() {
 
               <div>
 
+
                 <h1>
                   Your photos
                 </h1>
 
+
                 <p className="muted">
 
-                  A deliberately mixed library with similar moments
-                  and near-duplicates for realistic retrieval testing.
+                  A deliberately mixed library with similar moments and near-duplicates for realistic retrieval testing.
 
                 </p>
+
 
               </div>
 
@@ -1128,7 +1302,10 @@ function App() {
 
                   setTimeout(
                     () =>
-                      inputRef.current?.focus(),
+                      inputRef
+                        .current
+                        ?.focus(),
+
                     100
                   )
 
@@ -1145,7 +1322,8 @@ function App() {
             </div>
 
 
-            {Object.entries(grouped)
+            {Object
+              .entries(grouped)
               .map(
                 ([month, photos]) => (
 
@@ -1154,12 +1332,14 @@ function App() {
                     key={month}
                   >
 
+
                     <h2>
                       {month}
                     </h2>
 
 
                     <div className="photo-grid">
+
 
                       {photos.map(
                         photo => (
@@ -1178,12 +1358,15 @@ function App() {
                         )
                       )}
 
+
                     </div>
+
 
                   </div>
 
                 )
               )}
+
 
           </section>
 
@@ -1191,7 +1374,7 @@ function App() {
 
 
         {/* =====================================================
-            BASELINE SEARCH TAB
+            BASELINE SEARCH
             ===================================================== */}
 
         {view === 'search' && (
@@ -1201,25 +1384,29 @@ function App() {
 
             <div className="search-head">
 
+
               <p className="eyebrow">
                 BASELINE
               </p>
+
 
               <h1>
                 Search
               </h1>
 
+
               <p className="muted">
 
-                Keyword matching only.
-                Use this as the comparison condition in testing.
+                Keyword matching only. Use this as the comparison condition in testing.
 
               </p>
 
 
               <div className="big-search">
 
+
                 <Search size={21} />
+
 
                 <input
                   value={baseline}
@@ -1231,31 +1418,41 @@ function App() {
                   placeholder="Try café, city, medicine, car, plant…"
                 />
 
+
               </div>
+
 
             </div>
 
 
             <div className="result-head">
 
+
               <strong>
+
                 {baselineResults.length}
                 {' '}
                 photos
+
               </strong>
+
 
               {baseline && (
 
                 <span>
+
                   matching “{baseline}”
+
                 </span>
 
               )}
+
 
             </div>
 
 
             <div className="photo-grid">
+
 
               {baselineResults.map(
                 photo => (
@@ -1271,7 +1468,9 @@ function App() {
                 )
               )}
 
+
             </div>
+
 
           </section>
 
@@ -1279,7 +1478,7 @@ function App() {
 
 
         {/* =====================================================
-            MEMORY SEARCH TAB
+            MEMORY SEARCH
             ===================================================== */}
 
         {view === 'memory' && (
@@ -1301,16 +1500,14 @@ function App() {
 
               <h1>
 
-                What do you remember
-                about the photo?
+                What do you remember about the photo?
 
               </h1>
 
 
               <p>
 
-                Describe it naturally.
-                Exact dates and perfect keywords are not required.
+                Describe it naturally. Exact dates and perfect keywords are not required.
 
               </p>
 
@@ -1374,6 +1571,7 @@ function App() {
 
                 </div>
 
+
               </div>
 
 
@@ -1406,6 +1604,7 @@ function App() {
                       )
                     )}
 
+
                 </div>
 
               )}
@@ -1420,7 +1619,7 @@ function App() {
 
 
                 {/* =========================
-                    CLUE PANEL
+                    CLUES
                     ========================= */}
 
                 <aside className="clue-panel">
@@ -1431,18 +1630,22 @@ function App() {
 
                     <div>
 
+
                       <p className="eyebrow">
                         ACTIVE MEMORY
                       </p>
+
 
                       <h3>
                         Clues
                       </h3>
 
+
                     </div>
 
 
                     <SlidersHorizontal size={19} />
+
 
                   </div>
 
@@ -1480,9 +1683,11 @@ function App() {
                           >
 
                             {clue.enabled
+
                               ? (
                                   <Check size={14} />
                                 )
+
                               : null
                             }
 
@@ -1493,12 +1698,16 @@ function App() {
 
 
                             <strong>
+
                               {clue.value}
+
                             </strong>
 
 
                             <select
-                              value={clue.certainty}
+                              value={
+                                clue.certainty
+                              }
                               onChange={event =>
                                 setCertainty(
                                   clue.id,
@@ -1608,9 +1817,11 @@ function App() {
 
                     <div>
 
+
                       <strong>
                         Retrieval engine
                       </strong>
+
 
                       <span>
 
@@ -1618,6 +1829,7 @@ function App() {
                           modelStatus}
 
                       </span>
+
 
                     </div>
 
@@ -1629,7 +1841,7 @@ function App() {
 
 
                 {/* =========================
-                    CANDIDATE RESULTS
+                    RESULTS
                     ========================= */}
 
                 <div className="candidate-area">
@@ -1640,9 +1852,11 @@ function App() {
 
                     <div>
 
+
                       <p className="eyebrow">
                         CANDIDATES
                       </p>
+
 
                       <h2>
 
@@ -1652,6 +1866,7 @@ function App() {
                         }
 
                       </h2>
+
 
                     </div>
 
@@ -1698,8 +1913,7 @@ function App() {
 
                         <p>
 
-                          Answer only if you remember.
-                          “Not sure” keeps the search broad.
+                          Answer only if you remember. “Not sure” keeps the search broad.
 
                         </p>
 
@@ -1755,6 +1969,7 @@ function App() {
 
                     <>
 
+
                       <div className="ranked-grid">
 
 
@@ -1788,9 +2003,11 @@ function App() {
 
                         <div>
 
+
                           <strong>
                             Still not seeing it?
                           </strong>
+
 
                           <p>
 
@@ -1798,14 +2015,13 @@ function App() {
 
                           </p>
 
+
                         </div>
 
 
                         <button
                           className="secondary"
-                          onClick={
-                            endNoMatch
-                          }
+                          onClick={endNoMatch}
                         >
 
                           End as no confirmed match
@@ -1814,6 +2030,7 @@ function App() {
 
 
                       </div>
+
 
                     </>
 
@@ -1911,7 +2128,9 @@ function App() {
    RECOVERED MEMORY INPUT
    ========================================================= */
 
-function RecoveredInput({ onAdd }) {
+function RecoveredInput({
+  onAdd
+}) {
 
   const [value, setValue] =
     useState('')
@@ -1926,7 +2145,9 @@ function RecoveredInput({ onAdd }) {
 
 
       <label>
+
         Seeing results reminded me…
+
       </label>
 
 
@@ -2105,7 +2326,7 @@ function PhotoCard({
 
 
 /* =========================================================
-   PHOTO VIEWER
+   PHOTO MODAL
    ========================================================= */
 
 function PhotoModal({
@@ -2184,10 +2405,12 @@ function PhotoModal({
 
           <div className="large-photo">
 
+
             <img
               src={photo.url}
               alt={photo.title}
             />
+
 
           </div>
 
@@ -2207,7 +2430,9 @@ function PhotoModal({
 
             <div className="detail-row">
 
+
               <Clock3 size={17} />
+
 
               <span>
 
@@ -2229,12 +2454,15 @@ function PhotoModal({
 
               </span>
 
+
             </div>
 
 
             <div className="detail-row">
 
+
               <MapPin size={17} />
+
 
               <span>
 
@@ -2242,6 +2470,7 @@ function PhotoModal({
                   'Location not provided'}
 
               </span>
+
 
             </div>
 
@@ -2282,8 +2511,7 @@ function PhotoModal({
 
                   <p>
 
-                    Visual match signals are model inference;
-                    date/place shown above are demo metadata.
+                    Visual match signals are model inference; date/place shown above are demo metadata.
 
                   </p>
 
@@ -2366,6 +2594,7 @@ function SessionModal({
 
         <div className="success-icon">
 
+
           {task.outcome === 'confirmed'
 
             ? (
@@ -2377,11 +2606,14 @@ function SessionModal({
               )
           }
 
+
         </div>
 
 
         <p className="eyebrow">
+
           TEST SESSION
+
         </p>
 
 
@@ -2495,7 +2727,7 @@ function SessionModal({
 
 
 /* =========================================================
-   METRIC COMPONENT
+   METRIC
    ========================================================= */
 
 function Metric({
