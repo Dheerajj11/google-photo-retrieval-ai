@@ -1,422 +1,2524 @@
 import React, { useMemo, useRef, useState } from 'react'
 import {
-  Search, Sparkles, Images, X, SlidersHorizontal, Check, ChevronLeft,
-  Clock3, MapPin, Brain, Undo2, Download, RotateCcw, Eye, CircleHelp,
-  WandSparkles, Layers3, ChevronDown
+  Search,
+  Sparkles,
+  Images,
+  X,
+  SlidersHorizontal,
+  Check,
+  ChevronLeft,
+  Clock3,
+  MapPin,
+  Brain,
+  Undo2,
+  Download,
+  RotateCcw,
+  Eye,
+  CircleHelp,
+  WandSparkles,
+  Layers3,
+  ChevronDown
 } from 'lucide-react'
+
 import { demoPhotos, demoTasks } from './data/photos'
 import { generatedPhotos } from './data/generatedPhotos'
-import { aiSearch, extractClues, explanation, clarificationFor, moreLikeThis } from './lib/search'
+import {
+  aiSearch,
+  extractClues,
+  explanation,
+  clarificationFor,
+  moreLikeThis
+} from './lib/search'
 
-const libraryPhotos = generatedPhotos.length ? generatedPhotos : demoPhotos
+const libraryPhotos = generatedPhotos.length
+  ? generatedPhotos
+  : demoPhotos
 
 const NAV = [
-  {id:'photos', label:'Photos', icon:Images},
-  {id:'search', label:'Search', icon:Search},
-  {id:'memory', label:'Memory Search', icon:Sparkles},
+  {
+    id: 'photos',
+    label: 'Photos',
+    icon: Images
+  },
+  {
+    id: 'search',
+    label: 'Search',
+    icon: Search
+  },
+  {
+    id: 'memory',
+    label: 'Memory Search',
+    icon: Sparkles
+  }
 ]
 
-const certaintyLabel = { certain:'Certain', approximate:'Approximate', guess:'Guess', unknown:'Unknown' }
-
-function seconds(ms) {
-  const s = Math.max(0, Math.round(ms/1000))
-  return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`
+const certaintyLabel = {
+  certain: 'Certain',
+  approximate: 'Approximate',
+  guess: 'Guess',
+  unknown: 'Unknown'
 }
 
+function seconds(ms) {
+  const s = Math.max(0, Math.round(ms / 1000))
+
+  return s < 60
+    ? `${s}s`
+    : `${Math.floor(s / 60)}m ${s % 60}s`
+}
+
+
+/* =========================================================
+   GOOGLE PHOTOS STYLE LOGO
+   ========================================================= */
+
+function GooglePhotosLogo() {
+  return (
+    <svg
+      className="gphotos-logo"
+      viewBox="0 0 40 40"
+      aria-hidden="true"
+    >
+      <path
+        d="M20 20V4a16 16 0 0 1 16 16H20Z"
+        fill="#EA4335"
+      />
+
+      <path
+        d="M20 20h16a16 16 0 0 1-16 16V20Z"
+        fill="#4285F4"
+      />
+
+      <path
+        d="M20 20v16A16 16 0 0 1 4 20h16Z"
+        fill="#34A853"
+      />
+
+      <path
+        d="M20 20H4A16 16 0 0 1 20 4v16Z"
+        fill="#FBBC04"
+      />
+    </svg>
+  )
+}
+
+
 function App() {
-  const [view,setView] = useState('photos')
-  const [query,setQuery] = useState('')
-  const [baseline,setBaseline] = useState('')
-  const [clues,setClues] = useState([])
-  const [results,setResults] = useState([])
-  const [selected,setSelected] = useState(null)
-  const [modelStatus,setModelStatus] = useState('AI loads only when Memory Search is used')
-  const [progress,setProgress] = useState(null)
-  const [busy,setBusy] = useState(false)
-  const [clarification,setClarification] = useState(null)
-  const [task,setTask] = useState(null)
-  const [history,setHistory] = useState([])
-  const [showSession,setShowSession] = useState(false)
+
+  const [view, setView] = useState('photos')
+
+  const [query, setQuery] = useState('')
+
+  const [baseline, setBaseline] = useState('')
+
+  const [clues, setClues] = useState([])
+
+  const [results, setResults] = useState([])
+
+  const [selected, setSelected] = useState(null)
+
+  const [modelStatus, setModelStatus] = useState(
+    'AI loads only when Memory Search is used'
+  )
+
+  const [progress, setProgress] = useState(null)
+
+  const [busy, setBusy] = useState(false)
+
+  const [clarification, setClarification] = useState(null)
+
+  const [task, setTask] = useState(null)
+
+  const [history, setHistory] = useState([])
+
+  const [showSession, setShowSession] = useState(false)
+
   const inputRef = useRef(null)
 
+
+  /* =========================================================
+     BASELINE SEARCH
+     ========================================================= */
+
   const baselineResults = useMemo(() => {
-    const q = baseline.trim().toLowerCase()
-    if (!q) return libraryPhotos
-    return libraryPhotos.filter(p => `${p.title || ''} ${p.place || ''} ${p.description || ''} ${(p.tags || []).join(' ')}`.toLowerCase().includes(q))
+
+    const q = baseline
+      .trim()
+      .toLowerCase()
+
+    if (!q) {
+      return libraryPhotos
+    }
+
+    return libraryPhotos.filter(photo => {
+
+      const searchableText = `
+        ${photo.title || ''}
+        ${photo.place || ''}
+        ${photo.description || ''}
+        ${(photo.tags || []).join(' ')}
+      `.toLowerCase()
+
+      return searchableText.includes(q)
+
+    })
+
   }, [baseline])
 
-  const activeText = useMemo(() => clues.filter(c=>c.enabled).map(c=>c.value).join(' '), [clues])
 
-  const startTask = (memory) => {
-    const now=Date.now()
-    const t = {
-      id:`task-${now}`,
-      startedAt:new Date(now).toISOString(),
-      startedMs:now,
-      startingMemory:memory,
-      events:[{type:'task_started',at:new Date(now).toISOString(),memory}],
-      candidateSets:[],
-      photosOpened:[],
-      refinements:[],
-      questions:[],
-      outcome:null,
-      targetId:null,
+  /* =========================================================
+     ACTIVE MEMORY
+     ========================================================= */
+
+  const activeText = useMemo(() => {
+
+    return clues
+      .filter(clue => clue.enabled)
+      .map(clue => clue.value)
+      .join(' ')
+
+  }, [clues])
+
+
+  /* =========================================================
+     START TEST TASK
+     ========================================================= */
+
+  const startTask = memory => {
+
+    const now = Date.now()
+
+    const newTask = {
+
+      id: `task-${now}`,
+
+      startedAt: new Date(now).toISOString(),
+
+      startedMs: now,
+
+      startingMemory: memory,
+
+      events: [
+        {
+          type: 'task_started',
+          at: new Date(now).toISOString(),
+          memory
+        }
+      ],
+
+      candidateSets: [],
+
+      photosOpened: [],
+
+      refinements: [],
+
+      questions: [],
+
+      outcome: null,
+
+      targetId: null
     }
-    setTask(t)
-    return t
+
+    setTask(newTask)
+
+    return newTask
   }
 
-  const patchTask = (fn) => setTask(prev => prev ? fn(prev) : prev)
 
-  async function runMemorySearch(memory=query, nextClues=null, reason='initial') {
+  const patchTask = fn => {
+
+    setTask(previous => {
+
+      return previous
+        ? fn(previous)
+        : previous
+
+    })
+  }
+
+
+  /* =========================================================
+     MEMORY SEARCH
+     ========================================================= */
+
+  async function runMemorySearch(
+    memory = query,
+    nextClues = null,
+    reason = 'initial'
+  ) {
+
     const text = memory.trim()
-    if (!text) return
+
+    if (!text) {
+      return
+    }
 
     setBusy(true)
+
     setProgress(null)
 
-    // A different text query starts a NEW retrieval task. Never carry clues
-    // (for example "medicine") into the next query (for example "cafe").
-    const previousMemory = task?.startingMemory?.trim().toLowerCase() || ''
-    const isNewMemory = !nextClues && previousMemory !== text.toLowerCase()
 
-    const cs = nextClues || (
-      isNewMemory
-        ? extractClues(text)
-        : (clues.length ? clues : extractClues(text))
-    )
+    /*
+      A completely different memory query starts
+      a NEW retrieval task.
+
+      Previous clues must not accidentally carry
+      into a new search.
+    */
+
+    const previousMemory =
+      task?.startingMemory
+        ?.trim()
+        .toLowerCase() || ''
+
+    const isNewMemory =
+      !nextClues &&
+      previousMemory !== text.toLowerCase()
+
+
+    const currentClues =
+      nextClues ||
+      (
+        isNewMemory
+          ? extractClues(text)
+          : (
+              clues.length
+                ? clues
+                : extractClues(text)
+            )
+      )
+
 
     if (isNewMemory) {
-      setClues(cs)
+
+      setClues(currentClues)
+
       setHistory([])
+
       setResults([])
+
       setClarification(null)
+
     } else if (!clues.length && !nextClues) {
-      setClues(cs)
+
+      setClues(currentClues)
     }
 
-    const currentTask = isNewMemory ? startTask(text) : (task || startTask(text))
-    const effective = [text, ...cs.filter(c=>c.enabled).map(c=>c.value)]
-      .filter((value,index,array)=>array.indexOf(value)===index)
+
+    const currentTask = isNewMemory
+      ? startTask(text)
+      : (
+          task ||
+          startTask(text)
+        )
+
+
+    const effective = [
+
+      text,
+
+      ...currentClues
+        .filter(clue => clue.enabled)
+        .map(clue => clue.value)
+
+    ]
+      .filter(
+        (value, index, array) =>
+          array.indexOf(value) === index
+      )
       .join('. ')
 
+
     try {
-      const ranked = await aiSearch(effective, libraryPhotos, {
-        onStatus:setModelStatus,
-        onProgress:setProgress
-      })
+
+      const ranked = await aiSearch(
+        effective,
+        libraryPhotos,
+        {
+          onStatus: setModelStatus,
+          onProgress: setProgress
+        }
+      )
+
+
       setResults(ranked)
-      const q = clarificationFor(ranked, cs)
-      setClarification(q)
+
+
+      const question =
+        clarificationFor(
+          ranked,
+          currentClues
+        )
+
+
+      setClarification(question)
+
 
       const snapshot = {
-        at:new Date().toISOString(),
+
+        at: new Date().toISOString(),
+
         reason,
-        query:effective,
-        ids:ranked.slice(0,12).map(p=>p.id),
-        scores:ranked.slice(0,12).map(p=>Number(p.score.toFixed(4)))
+
+        query: effective,
+
+        ids: ranked
+          .slice(0, 12)
+          .map(photo => photo.id),
+
+        scores: ranked
+          .slice(0, 12)
+          .map(photo =>
+            Number(
+              photo.score.toFixed(4)
+            )
+          )
       }
 
-      setHistory(h=>[...h,{query:text,clues:cs,results:ranked}])
-      setTask(prev => {
-        const base = isNewMemory ? currentTask : (prev || currentTask)
-        return {...base,
-          candidateSets:[...(base.candidateSets||[]),snapshot],
-          events:[...(base.events||[]),{type:'candidate_set',...snapshot}]
+
+      setHistory(previous => [
+
+        ...previous,
+
+        {
+          query: text,
+          clues: currentClues,
+          results: ranked
         }
+
+      ])
+
+
+      setTask(previous => {
+
+        const base = isNewMemory
+          ? currentTask
+          : (
+              previous ||
+              currentTask
+            )
+
+
+        return {
+
+          ...base,
+
+          candidateSets: [
+            ...(base.candidateSets || []),
+            snapshot
+          ],
+
+          events: [
+            ...(base.events || []),
+            {
+              type: 'candidate_set',
+              ...snapshot
+            }
+          ]
+        }
+
       })
+
+
     } finally {
+
       setBusy(false)
+
     }
   }
 
-  function addRecoveredClue(value, certainty='certain') {
-    const v=value.trim()
-    if (!v) return
-    const c={id:`clue-${Date.now()}`,value:v,certainty,source:'recovered_memory',enabled:true}
-    const next=[...clues,c]
+
+  /* =========================================================
+     RECOVERED MEMORY
+     ========================================================= */
+
+  function addRecoveredClue(
+    value,
+    certainty = 'certain'
+  ) {
+
+    const cleanValue = value.trim()
+
+    if (!cleanValue) {
+      return
+    }
+
+
+    const clue = {
+
+      id: `clue-${Date.now()}`,
+
+      value: cleanValue,
+
+      certainty,
+
+      source: 'recovered_memory',
+
+      enabled: true
+    }
+
+
+    const next = [
+      ...clues,
+      clue
+    ]
+
+
     setClues(next)
-    patchTask(t=>({...t,
-      refinements:[...t.refinements,{at:new Date().toISOString(),type:'recovered_clue',value:v,certainty}],
-      events:[...t.events,{type:'recovered_clue',at:new Date().toISOString(),value:v,certainty}]
+
+
+    patchTask(current => ({
+
+      ...current,
+
+      refinements: [
+
+        ...current.refinements,
+
+        {
+          at: new Date().toISOString(),
+          type: 'recovered_clue',
+          value: cleanValue,
+          certainty
+        }
+
+      ],
+
+      events: [
+
+        ...current.events,
+
+        {
+          type: 'recovered_clue',
+          at: new Date().toISOString(),
+          value: cleanValue,
+          certainty
+        }
+
+      ]
+
     }))
-    runMemorySearch(query,next,'recovered_clue')
+
+
+    runMemorySearch(
+      query,
+      next,
+      'recovered_clue'
+    )
   }
+
+
+  /* =========================================================
+     CLUE CONTROLS
+     ========================================================= */
 
   function toggleClue(id) {
-    const next=clues.map(c=>c.id===id?{...c,enabled:!c.enabled}:c)
+
+    const next = clues.map(clue => {
+
+      return clue.id === id
+        ? {
+            ...clue,
+            enabled: !clue.enabled
+          }
+        : clue
+
+    })
+
     setClues(next)
   }
 
-  function setCertainty(id,certainty) {
-    const next=clues.map(c=>c.id===id?{...c,certainty}:c)
+
+  function setCertainty(id, certainty) {
+
+    const next = clues.map(clue => {
+
+      return clue.id === id
+        ? {
+            ...clue,
+            certainty
+          }
+        : clue
+
+    })
+
     setClues(next)
   }
+
 
   function removeClue(id) {
-    setClues(clues.filter(c=>c.id!==id))
+
+    setClues(
+      clues.filter(
+        clue => clue.id !== id
+      )
+    )
   }
 
-  function openPhoto(p) {
-    setSelected(p)
-    patchTask(t=> t ? {...t,
-      photosOpened:[...t.photosOpened,{id:p.id,at:new Date().toISOString(),rank:results.findIndex(r=>r.id===p.id)+1}],
-      events:[...t.events,{type:'photo_opened',at:new Date().toISOString(),id:p.id,rank:results.findIndex(r=>r.id===p.id)+1}]
-    } : t)
+
+  /* =========================================================
+     OPEN PHOTO
+     ========================================================= */
+
+  function openPhoto(photo) {
+
+    setSelected(photo)
+
+
+    patchTask(current => {
+
+      if (!current) {
+        return current
+      }
+
+
+      return {
+
+        ...current,
+
+        photosOpened: [
+
+          ...current.photosOpened,
+
+          {
+            id: photo.id,
+            at: new Date().toISOString(),
+            rank:
+              results.findIndex(
+                result =>
+                  result.id === photo.id
+              ) + 1
+          }
+
+        ],
+
+        events: [
+
+          ...current.events,
+
+          {
+            type: 'photo_opened',
+            at: new Date().toISOString(),
+            id: photo.id,
+            rank:
+              results.findIndex(
+                result =>
+                  result.id === photo.id
+              ) + 1
+          }
+
+        ]
+
+      }
+
+    })
   }
 
-  async function visualRefine(p) {
+
+  /* =========================================================
+     MORE LIKE THIS
+     ========================================================= */
+
+  async function visualRefine(photo) {
+
     setSelected(null)
+
     setBusy(true)
+
+
     try {
-      const ranked=await moreLikeThis(p,libraryPhotos,{onStatus:setModelStatus,onProgress:setProgress})
+
+      const ranked = await moreLikeThis(
+        photo,
+        libraryPhotos,
+        {
+          onStatus: setModelStatus,
+          onProgress: setProgress
+        }
+      )
+
+
       setResults(ranked)
-      patchTask(t=>({...t,
-        refinements:[...t.refinements,{at:new Date().toISOString(),type:'more_like_this',photoId:p.id}],
-        candidateSets:[...t.candidateSets,{at:new Date().toISOString(),reason:'more_like_this',ids:ranked.slice(0,12).map(x=>x.id)}],
-        events:[...t.events,{type:'more_like_this',at:new Date().toISOString(),photoId:p.id}]
+
+
+      patchTask(current => ({
+
+        ...current,
+
+        refinements: [
+
+          ...current.refinements,
+
+          {
+            at: new Date().toISOString(),
+            type: 'more_like_this',
+            photoId: photo.id
+          }
+
+        ],
+
+        candidateSets: [
+
+          ...current.candidateSets,
+
+          {
+            at: new Date().toISOString(),
+            reason: 'more_like_this',
+            ids: ranked
+              .slice(0, 12)
+              .map(item => item.id)
+          }
+
+        ],
+
+        events: [
+
+          ...current.events,
+
+          {
+            type: 'more_like_this',
+            at: new Date().toISOString(),
+            photoId: photo.id
+          }
+
+        ]
+
       }))
-    } finally { setBusy(false) }
+
+
+    } finally {
+
+      setBusy(false)
+
+    }
   }
+
+
+  /* =========================================================
+     AI CLARIFICATION
+     ========================================================= */
 
   function answerQuestion(answer) {
-    patchTask(t=>({...t,
-      questions:[...t.questions,{at:new Date().toISOString(),question:clarification.question,answer}],
-      events:[...t.events,{type:'clarification_answered',at:new Date().toISOString(),question:clarification.question,answer}]
+
+    patchTask(current => ({
+
+      ...current,
+
+      questions: [
+
+        ...current.questions,
+
+        {
+          at: new Date().toISOString(),
+          question: clarification.question,
+          answer
+        }
+
+      ],
+
+      events: [
+
+        ...current.events,
+
+        {
+          type: 'clarification_answered',
+          at: new Date().toISOString(),
+          question: clarification.question,
+          answer
+        }
+
+      ]
+
     }))
-    if (answer==='not sure') { setClarification(null); return }
+
+
+    if (answer === 'not sure') {
+
+      setClarification(null)
+
+      return
+    }
+
+
     setClarification(null)
-    addRecoveredClue(answer,'certain')
+
+    addRecoveredClue(
+      answer,
+      'certain'
+    )
   }
 
-  function confirmTarget(p) {
-    const end=Date.now()
-    patchTask(t=>({...t,
-      completedAt:new Date(end).toISOString(),
-      elapsedMs:end-t.startedMs,
-      targetId:p.id,
-      outcome:'confirmed',
-      events:[...t.events,{type:'target_confirmed',at:new Date(end).toISOString(),photoId:p.id}]
+
+  /* =========================================================
+     CONFIRM TARGET
+     ========================================================= */
+
+  function confirmTarget(photo) {
+
+    const end = Date.now()
+
+
+    patchTask(current => ({
+
+      ...current,
+
+      completedAt:
+        new Date(end).toISOString(),
+
+      elapsedMs:
+        end - current.startedMs,
+
+      targetId:
+        photo.id,
+
+      outcome:
+        'confirmed',
+
+      events: [
+
+        ...current.events,
+
+        {
+          type: 'target_confirmed',
+          at:
+            new Date(end).toISOString(),
+          photoId:
+            photo.id
+        }
+
+      ]
+
     }))
+
+
     setSelected(null)
+
     setShowSession(true)
   }
+
+
+  /* =========================================================
+     END WITHOUT MATCH
+     ========================================================= */
 
   function endNoMatch() {
-    const end=Date.now()
-    patchTask(t=>({...t,
-      completedAt:new Date(end).toISOString(),
-      elapsedMs:end-t.startedMs,
-      outcome:'no_confirmed_match',
-      events:[...t.events,{type:'task_ended',at:new Date(end).toISOString(),outcome:'no_confirmed_match'}]
+
+    const end = Date.now()
+
+
+    patchTask(current => ({
+
+      ...current,
+
+      completedAt:
+        new Date(end).toISOString(),
+
+      elapsedMs:
+        end - current.startedMs,
+
+      outcome:
+        'no_confirmed_match',
+
+      events: [
+
+        ...current.events,
+
+        {
+          type: 'task_ended',
+          at:
+            new Date(end).toISOString(),
+          outcome:
+            'no_confirmed_match'
+        }
+
+      ]
+
     }))
+
+
     setShowSession(true)
   }
 
+
+  /* =========================================================
+     RESET TASK
+     ========================================================= */
+
   function resetTask() {
-    setQuery(''); setClues([]); setResults([]); setSelected(null); setTask(null)
-    setHistory([]); setClarification(null); setProgress(null); setShowSession(false)
-    setModelStatus('AI loads only when Memory Search is used')
+
+    setQuery('')
+
+    setClues([])
+
+    setResults([])
+
+    setSelected(null)
+
+    setTask(null)
+
+    setHistory([])
+
+    setClarification(null)
+
+    setProgress(null)
+
+    setShowSession(false)
+
+    setModelStatus(
+      'AI loads only when Memory Search is used'
+    )
   }
+
+
+  /* =========================================================
+     UNDO
+     ========================================================= */
 
   function undo() {
-    if (history.length<2) return
-    const prior=history[history.length-2]
-    setHistory(history.slice(0,-1)); setQuery(prior.query); setClues(prior.clues); setResults(prior.results)
+
+    if (history.length < 2) {
+      return
+    }
+
+
+    const prior =
+      history[
+        history.length - 2
+      ]
+
+
+    setHistory(
+      history.slice(0, -1)
+    )
+
+
+    setQuery(
+      prior.query
+    )
+
+
+    setClues(
+      prior.clues
+    )
+
+
+    setResults(
+      prior.results
+    )
   }
 
+
+  /* =========================================================
+     EXPORT SESSION
+     ========================================================= */
+
   function exportSession() {
-    if (!task) return
-    const blob=new Blob([JSON.stringify({...task,elapsedMs:task.elapsedMs || Date.now()-task.startedMs},null,2)],{type:'application/json'})
-    const url=URL.createObjectURL(blob)
-    const a=document.createElement('a'); a.href=url; a.download=`${task.id}.json`; a.click()
+
+    if (!task) {
+      return
+    }
+
+
+    const blob = new Blob(
+
+      [
+        JSON.stringify(
+          {
+            ...task,
+            elapsedMs:
+              task.elapsedMs ||
+              Date.now() -
+                task.startedMs
+          },
+          null,
+          2
+        )
+      ],
+
+      {
+        type: 'application/json'
+      }
+
+    )
+
+
+    const url =
+      URL.createObjectURL(blob)
+
+
+    const anchor =
+      document.createElement('a')
+
+
+    anchor.href = url
+
+
+    anchor.download =
+      `${task.id}.json`
+
+
+    anchor.click()
+
+
     URL.revokeObjectURL(url)
   }
 
+
+  /* =========================================================
+     GROUP PHOTO LIBRARY
+     ========================================================= */
+
   const grouped = useMemo(() => {
-    const map={}
-    libraryPhotos.forEach(p => {
-      const m = p.taken ? new Date(p.taken).toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Project photo library'
-      ;(map[m] ||= []).push(p)
+
+    const map = {}
+
+
+    libraryPhotos.forEach(photo => {
+
+      const month = photo.taken
+
+        ? new Date(
+            photo.taken
+          ).toLocaleDateString(
+            'en-US',
+            {
+              month: 'long',
+              year: 'numeric'
+            }
+          )
+
+        : 'Project photo library'
+
+
+      ;(map[month] ||= [])
+        .push(photo)
+
     })
+
+
     return map
-  },[])
 
-  return <div className="app-shell">
-    <header className="topbar">
-      <button className="brand" onClick={()=>setView('photos')} aria-label="Memory Guided Photos home">
-        <span className="brand-mark"><Sparkles size={19}/></span>
-        <span>Memory Guided Photos</span>
-      </button>
-      <nav className="nav">
-        {NAV.map(({id,label,icon:Icon}) => <button key={id} className={view===id?'nav-item active':'nav-item'} onClick={()=>setView(id)}>
-          <Icon size={18}/><span>{label}</span>
-        </button>)}
-      </nav>
-      <div className="status-pill"><span className="status-dot"/>{libraryPhotos.length} demo photos</div>
-    </header>
+  }, [])
 
-    <main>
-      {view==='photos' && <section className="page photos-page">
-        <div className="hero-row">
-          <div><p className="eyebrow">DEMO LIBRARY</p><h1>Your photos</h1><p className="muted">A deliberately mixed library with similar moments and near-duplicates for realistic retrieval testing.</p></div>
-          <button className="primary" onClick={()=>{setView('memory'); setTimeout(()=>inputRef.current?.focus(),100)}}><Sparkles size={18}/> Find from memory</button>
+
+  /* =========================================================
+     APP UI
+     ========================================================= */
+
+  return (
+
+    <div className="app-shell">
+
+
+      {/* =========================
+          GOOGLE PHOTOS HEADER
+          ========================= */}
+
+      <header className="topbar">
+
+        <button
+          className="brand google-brand"
+          onClick={() =>
+            setView('photos')
+          }
+          aria-label="Google Photos research prototype home"
+        >
+
+          <GooglePhotosLogo />
+
+          <span className="brand-copy">
+
+            <span className="google-photos-name">
+              Google Photos
+            </span>
+
+            <span className="prototype-note">
+              Research prototype
+            </span>
+
+          </span>
+
+        </button>
+
+
+        <nav className="nav">
+
+          {NAV.map(
+            ({
+              id,
+              label,
+              icon: Icon
+            }) => (
+
+              <button
+                key={id}
+                className={
+                  view === id
+                    ? 'nav-item active'
+                    : 'nav-item'
+                }
+                onClick={() =>
+                  setView(id)
+                }
+              >
+
+                <Icon size={19} />
+
+                <span>
+                  {label}
+                </span>
+
+              </button>
+
+            )
+          )}
+
+        </nav>
+
+
+        <div className="status-pill">
+
+          <span className="status-dot" />
+
+          {libraryPhotos.length}
+          {' '}
+          demo photos
+
         </div>
-        {Object.entries(grouped).map(([month,photos])=><div className="month" key={month}>
-          <h2>{month}</h2>
-          <div className="photo-grid">{photos.map(p=><PhotoCard key={p.id} photo={p} onClick={()=>openPhoto(p)} showBadge={!!p.duplicateOf}/>)}</div>
-        </div>)}
-      </section>}
 
-      {view==='search' && <section className="page">
-        <div className="search-head">
-          <p className="eyebrow">BASELINE</p><h1>Search</h1>
-          <p className="muted">Keyword matching only. Use this as the comparison condition in testing.</p>
-          <div className="big-search"><Search size={21}/><input value={baseline} onChange={e=>setBaseline(e.target.value)} placeholder="Try café, city, medicine, beach…"/></div>
-        </div>
-        <div className="result-head"><strong>{baselineResults.length} photos</strong>{baseline && <span>matching “{baseline}”</span>}</div>
-        <div className="photo-grid">{baselineResults.map(p=><PhotoCard key={p.id} photo={p} onClick={()=>openPhoto(p)}/>)}</div>
-      </section>}
+      </header>
 
-      {view==='memory' && <section className="page memory-page">
-        <div className="memory-hero">
-          <span className="ai-kicker"><Sparkles size={16}/> MEMORY SEARCH</span>
-          <h1>What do you remember about the photo?</h1>
-          <p>Describe it naturally. Exact dates and perfect keywords are not required.</p>
-          <div className="memory-box">
-            <textarea ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Example: It was during our Goa trip. We were at a café with plants around us. I don't remember the exact date…"/>
-            <div className="memory-actions">
-              <span className="privacy-note"><Brain size={15}/> Runs with a free browser AI model when available</span>
-              <button className="primary" disabled={busy||!query.trim()} onClick={()=>runMemorySearch()}>{busy?<span className="spinner"/>:<WandSparkles size={18}/>} {busy?'Searching…':'Search from memory'}</button>
+
+      <main>
+
+
+        {/* =====================================================
+            PHOTOS TAB
+            ===================================================== */}
+
+        {view === 'photos' && (
+
+          <section className="page photos-page">
+
+
+            <div className="hero-row">
+
+
+              <div>
+
+                <h1>
+                  Your photos
+                </h1>
+
+                <p className="muted">
+
+                  A deliberately mixed library with similar moments
+                  and near-duplicates for realistic retrieval testing.
+
+                </p>
+
+              </div>
+
+
+              <button
+                className="primary"
+                onClick={() => {
+
+                  setView('memory')
+
+                  setTimeout(
+                    () =>
+                      inputRef.current?.focus(),
+                    100
+                  )
+
+                }}
+              >
+
+                <Sparkles size={18} />
+
+                Find from memory
+
+              </button>
+
+
             </div>
+
+
+            {Object.entries(grouped)
+              .map(
+                ([month, photos]) => (
+
+                  <div
+                    className="month"
+                    key={month}
+                  >
+
+                    <h2>
+                      {month}
+                    </h2>
+
+
+                    <div className="photo-grid">
+
+                      {photos.map(
+                        photo => (
+
+                          <PhotoCard
+                            key={photo.id}
+                            photo={photo}
+                            onClick={() =>
+                              openPhoto(photo)
+                            }
+                            showBadge={
+                              !!photo.duplicateOf
+                            }
+                          />
+
+                        )
+                      )}
+
+                    </div>
+
+                  </div>
+
+                )
+              )}
+
+          </section>
+
+        )}
+
+
+        {/* =====================================================
+            BASELINE SEARCH TAB
+            ===================================================== */}
+
+        {view === 'search' && (
+
+          <section className="page">
+
+
+            <div className="search-head">
+
+              <p className="eyebrow">
+                BASELINE
+              </p>
+
+              <h1>
+                Search
+              </h1>
+
+              <p className="muted">
+
+                Keyword matching only.
+                Use this as the comparison condition in testing.
+
+              </p>
+
+
+              <div className="big-search">
+
+                <Search size={21} />
+
+                <input
+                  value={baseline}
+                  onChange={event =>
+                    setBaseline(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Try café, city, medicine, car, plant…"
+                />
+
+              </div>
+
+            </div>
+
+
+            <div className="result-head">
+
+              <strong>
+                {baselineResults.length}
+                {' '}
+                photos
+              </strong>
+
+              {baseline && (
+
+                <span>
+                  matching “{baseline}”
+                </span>
+
+              )}
+
+            </div>
+
+
+            <div className="photo-grid">
+
+              {baselineResults.map(
+                photo => (
+
+                  <PhotoCard
+                    key={photo.id}
+                    photo={photo}
+                    onClick={() =>
+                      openPhoto(photo)
+                    }
+                  />
+
+                )
+              )}
+
+            </div>
+
+          </section>
+
+        )}
+
+
+        {/* =====================================================
+            MEMORY SEARCH TAB
+            ===================================================== */}
+
+        {view === 'memory' && (
+
+          <section className="page memory-page">
+
+
+            <div className="memory-hero">
+
+
+              <span className="ai-kicker">
+
+                <Sparkles size={16} />
+
+                MEMORY SEARCH
+
+              </span>
+
+
+              <h1>
+
+                What do you remember
+                about the photo?
+
+              </h1>
+
+
+              <p>
+
+                Describe it naturally.
+                Exact dates and perfect keywords are not required.
+
+              </p>
+
+
+              <div className="memory-box">
+
+
+                <textarea
+                  ref={inputRef}
+                  value={query}
+                  onChange={event =>
+                    setQuery(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Example: It was during our Goa trip. We were at a café with plants around us. I don't remember the exact date…"
+                />
+
+
+                <div className="memory-actions">
+
+
+                  <span className="privacy-note">
+
+                    <Brain size={15} />
+
+                    Runs with a free browser AI model when available
+
+                  </span>
+
+
+                  <button
+                    className="primary"
+                    disabled={
+                      busy ||
+                      !query.trim()
+                    }
+                    onClick={() =>
+                      runMemorySearch()
+                    }
+                  >
+
+                    {busy
+
+                      ? (
+                          <span className="spinner" />
+                        )
+
+                      : (
+                          <WandSparkles size={18} />
+                        )
+                    }
+
+                    {busy
+                      ? 'Searching…'
+                      : 'Search from memory'
+                    }
+
+                  </button>
+
+
+                </div>
+
+              </div>
+
+
+              {!task && (
+
+                <div className="demo-prompts">
+
+
+                  <span>
+                    Try a demo:
+                  </span>
+
+
+                  {demoTasks
+                    .slice(0, 3)
+                    .map(
+                      demo => (
+
+                        <button
+                          key={demo}
+                          onClick={() =>
+                            setQuery(demo)
+                          }
+                        >
+
+                          {demo}
+
+                        </button>
+
+                      )
+                    )}
+
+                </div>
+
+              )}
+
+
+            </div>
+
+
+            {task && (
+
+              <div className="workspace">
+
+
+                {/* =========================
+                    CLUE PANEL
+                    ========================= */}
+
+                <aside className="clue-panel">
+
+
+                  <div className="panel-title">
+
+
+                    <div>
+
+                      <p className="eyebrow">
+                        ACTIVE MEMORY
+                      </p>
+
+                      <h3>
+                        Clues
+                      </h3>
+
+                    </div>
+
+
+                    <SlidersHorizontal size={19} />
+
+                  </div>
+
+
+                  <p className="small-muted">
+
+                    Turn off uncertain details instead of letting a guess remove the target.
+
+                  </p>
+
+
+                  <div className="clue-list">
+
+
+                    {clues.map(
+                      clue => (
+
+                        <div
+                          className={
+                            clue.enabled
+                              ? 'clue'
+                              : 'clue disabled'
+                          }
+                          key={clue.id}
+                        >
+
+
+                          <button
+                            className="clue-check"
+                            onClick={() =>
+                              toggleClue(
+                                clue.id
+                              )
+                            }
+                          >
+
+                            {clue.enabled
+                              ? (
+                                  <Check size={14} />
+                                )
+                              : null
+                            }
+
+                          </button>
+
+
+                          <div className="clue-main">
+
+
+                            <strong>
+                              {clue.value}
+                            </strong>
+
+
+                            <select
+                              value={clue.certainty}
+                              onChange={event =>
+                                setCertainty(
+                                  clue.id,
+                                  event.target.value
+                                )
+                              }
+                            >
+
+                              <option value="certain">
+                                Certain
+                              </option>
+
+                              <option value="approximate">
+                                Approximate
+                              </option>
+
+                              <option value="guess">
+                                Guess
+                              </option>
+
+                              <option value="unknown">
+                                Unknown
+                              </option>
+
+                            </select>
+
+
+                          </div>
+
+
+                          <button
+                            className="icon-btn"
+                            onClick={() =>
+                              removeClue(
+                                clue.id
+                              )
+                            }
+                            aria-label="Remove clue"
+                          >
+
+                            <X size={15} />
+
+                          </button>
+
+
+                        </div>
+
+                      )
+                    )}
+
+
+                  </div>
+
+
+                  <RecoveredInput
+                    onAdd={
+                      addRecoveredClue
+                    }
+                  />
+
+
+                  <div className="panel-actions">
+
+
+                    <button
+                      className="secondary small"
+                      onClick={() =>
+                        runMemorySearch(
+                          query,
+                          clues,
+                          'manual_refinement'
+                        )
+                      }
+                      disabled={busy}
+                    >
+
+                      <Sparkles size={15} />
+
+                      Apply clues
+
+                    </button>
+
+
+                    <button
+                      className="secondary small"
+                      onClick={undo}
+                      disabled={
+                        history.length < 2
+                      }
+                    >
+
+                      <Undo2 size={15} />
+
+                      Undo
+
+                    </button>
+
+
+                  </div>
+
+
+                  <div className="model-status">
+
+
+                    <span className="status-dot ai" />
+
+
+                    <div>
+
+                      <strong>
+                        Retrieval engine
+                      </strong>
+
+                      <span>
+
+                        {progress?.label ||
+                          modelStatus}
+
+                      </span>
+
+                    </div>
+
+
+                  </div>
+
+
+                </aside>
+
+
+                {/* =========================
+                    CANDIDATE RESULTS
+                    ========================= */}
+
+                <div className="candidate-area">
+
+
+                  <div className="candidate-head">
+
+
+                    <div>
+
+                      <p className="eyebrow">
+                        CANDIDATES
+                      </p>
+
+                      <h2>
+
+                        {results.length
+                          ? 'Possible matches'
+                          : 'Ready to search'
+                        }
+
+                      </h2>
+
+                    </div>
+
+
+                    {results.length > 0 && (
+
+                      <div className="candidate-meta">
+
+                        <Eye size={16} />
+
+                        {task.photosOpened.length}
+                        {' '}
+                        inspected
+
+                      </div>
+
+                    )}
+
+
+                  </div>
+
+
+                  {clarification && (
+
+                    <div className="clarification">
+
+
+                      <div className="clarification-icon">
+
+                        <CircleHelp size={20} />
+
+                      </div>
+
+
+                      <div>
+
+
+                        <strong>
+
+                          {clarification.question}
+
+                        </strong>
+
+
+                        <p>
+
+                          Answer only if you remember.
+                          “Not sure” keeps the search broad.
+
+                        </p>
+
+
+                        <div className="answer-row">
+
+
+                          {clarification.options
+                            .map(
+                              option => (
+
+                                <button
+                                  key={option}
+                                  onClick={() =>
+                                    answerQuestion(
+                                      option
+                                    )
+                                  }
+                                >
+
+                                  {option}
+
+                                </button>
+
+                              )
+                            )}
+
+
+                        </div>
+
+
+                      </div>
+
+
+                      <button
+                        className="icon-btn"
+                        onClick={() =>
+                          setClarification(null)
+                        }
+                      >
+
+                        <X size={16} />
+
+                      </button>
+
+
+                    </div>
+
+                  )}
+
+
+                  {results.length > 0 && (
+
+                    <>
+
+                      <div className="ranked-grid">
+
+
+                        {results
+                          .slice(0, 16)
+                          .map(
+                            (photo, index) => (
+
+                              <PhotoCard
+                                key={photo.id}
+                                photo={photo}
+                                rank={index + 1}
+                                score={photo.score}
+                                onClick={() =>
+                                  openPhoto(photo)
+                                }
+                                showBadge={
+                                  !!photo.duplicateOf
+                                }
+                              />
+
+                            )
+                          )}
+
+
+                      </div>
+
+
+                      <div className="no-match">
+
+
+                        <div>
+
+                          <strong>
+                            Still not seeing it?
+                          </strong>
+
+                          <p>
+
+                            No confirmed match only means it was not found in this demo collection yet.
+
+                          </p>
+
+                        </div>
+
+
+                        <button
+                          className="secondary"
+                          onClick={
+                            endNoMatch
+                          }
+                        >
+
+                          End as no confirmed match
+
+                        </button>
+
+
+                      </div>
+
+                    </>
+
+                  )}
+
+
+                </div>
+
+
+              </div>
+
+            )}
+
+
+          </section>
+
+        )}
+
+
+      </main>
+
+
+      {/* =====================================================
+          PHOTO MODAL
+          ===================================================== */}
+
+      {selected && (
+
+        <PhotoModal
+
+          photo={selected}
+
+          query={
+            view === 'memory'
+              ? `${query} ${activeText}`
+              : baseline
+          }
+
+          memoryMode={
+            view === 'memory' &&
+            !!task
+          }
+
+          onClose={() =>
+            setSelected(null)
+          }
+
+          onConfirm={
+            confirmTarget
+          }
+
+          onMoreLike={
+            visualRefine
+          }
+
+        />
+
+      )}
+
+
+      {/* =====================================================
+          TEST SESSION MODAL
+          ===================================================== */}
+
+      {showSession && task && (
+
+        <SessionModal
+
+          task={task}
+
+          onClose={() =>
+            setShowSession(false)
+          }
+
+          onExport={
+            exportSession
+          }
+
+          onReset={
+            resetTask
+          }
+
+        />
+
+      )}
+
+
+    </div>
+
+  )
+}
+
+
+/* =========================================================
+   RECOVERED MEMORY INPUT
+   ========================================================= */
+
+function RecoveredInput({ onAdd }) {
+
+  const [value, setValue] =
+    useState('')
+
+  const [certainty, setCertainty] =
+    useState('certain')
+
+
+  return (
+
+    <div className="recovered-box">
+
+
+      <label>
+        Seeing results reminded me…
+      </label>
+
+
+      <input
+        value={value}
+        onChange={event =>
+          setValue(
+            event.target.value
+          )
+        }
+        onKeyDown={event => {
+
+          if (
+            event.key === 'Enter' &&
+            value.trim()
+          ) {
+
+            onAdd(
+              value,
+              certainty
+            )
+
+            setValue('')
+
+          }
+
+        }}
+        placeholder="e.g. there was a yellow sign"
+      />
+
+
+      <div className="recovered-actions">
+
+
+        <select
+          value={certainty}
+          onChange={event =>
+            setCertainty(
+              event.target.value
+            )
+          }
+        >
+
+          <option value="certain">
+            Certain
+          </option>
+
+          <option value="approximate">
+            Approximate
+          </option>
+
+          <option value="guess">
+            Guess
+          </option>
+
+        </select>
+
+
+        <button
+          onClick={() => {
+
+            if (value.trim()) {
+
+              onAdd(
+                value,
+                certainty
+              )
+
+              setValue('')
+
+            }
+
+          }}
+        >
+
+          Add clue
+
+        </button>
+
+
+      </div>
+
+
+    </div>
+
+  )
+}
+
+
+/* =========================================================
+   PHOTO CARD
+   ========================================================= */
+
+function PhotoCard({
+  photo,
+  onClick,
+  rank,
+  score,
+  showBadge
+}) {
+
+  return (
+
+    <button
+      className="photo-card"
+      onClick={onClick}
+    >
+
+
+      <img
+        src={photo.url}
+        alt={photo.title}
+        loading="lazy"
+      />
+
+
+      {rank && (
+
+        <span className="rank">
+          #{rank}
+        </span>
+
+      )}
+
+
+      {showBadge && (
+
+        <span className="similar-badge">
+
+          <Layers3 size={12} />
+
+          similar
+
+        </span>
+
+      )}
+
+
+      {score !== undefined && (
+
+        <span className="score">
+
+          {Math.round(
+            score * 100
+          )}
+          %
+
+        </span>
+
+      )}
+
+
+      <div className="photo-caption">
+
+
+        <strong>
+          {photo.title}
+        </strong>
+
+
+        <span>
+
+          {photo.place ||
+            'Project library'}
+
+        </span>
+
+
+      </div>
+
+
+    </button>
+
+  )
+}
+
+
+/* =========================================================
+   PHOTO VIEWER
+   ========================================================= */
+
+function PhotoModal({
+  photo,
+  onClose,
+  onConfirm,
+  onMoreLike,
+  memoryMode,
+  query
+}) {
+
+  const matched =
+    explanation(
+      query,
+      photo
+    )
+
+
+  return (
+
+    <div
+      className="modal-backdrop"
+      onMouseDown={event => {
+
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+
+          onClose()
+
+        }
+
+      }}
+    >
+
+
+      <div className="photo-modal">
+
+
+        <div className="modal-top">
+
+
+          <button
+            className="secondary small"
+            onClick={onClose}
+          >
+
+            <ChevronLeft size={17} />
+
+            Back
+
+          </button>
+
+
+          <span>
+            {photo.title}
+          </span>
+
+
+          <button
+            className="icon-btn"
+            onClick={onClose}
+          >
+
+            <X size={18} />
+
+          </button>
+
+
+        </div>
+
+
+        <div className="photo-modal-body">
+
+
+          <div className="large-photo">
+
+            <img
+              src={photo.url}
+              alt={photo.title}
+            />
+
           </div>
-          {!task && <div className="demo-prompts">
-            <span>Try a demo:</span>
-            {demoTasks.slice(0,3).map(t=><button key={t} onClick={()=>setQuery(t)}>{t}</button>)}
-          </div>}
-        </div>
 
-        {task && <div className="workspace">
-          <aside className="clue-panel">
-            <div className="panel-title"><div><p className="eyebrow">ACTIVE MEMORY</p><h3>Clues</h3></div><SlidersHorizontal size={19}/></div>
-            <p className="small-muted">Turn off uncertain details instead of letting a guess remove the target.</p>
-            <div className="clue-list">
-              {clues.map(c=><div className={c.enabled?'clue':'clue disabled'} key={c.id}>
-                <button className="clue-check" onClick={()=>toggleClue(c.id)}>{c.enabled?<Check size={14}/>:null}</button>
-                <div className="clue-main"><strong>{c.value}</strong><select value={c.certainty} onChange={e=>setCertainty(c.id,e.target.value)}>
-                  <option value="certain">Certain</option><option value="approximate">Approximate</option><option value="guess">Guess</option><option value="unknown">Unknown</option>
-                </select></div>
-                <button className="icon-btn" onClick={()=>removeClue(c.id)} aria-label="Remove clue"><X size={15}/></button>
-              </div>)}
+
+          <aside className="photo-info">
+
+
+            <p className="eyebrow">
+              PHOTO DETAILS
+            </p>
+
+
+            <h2>
+              {photo.title}
+            </h2>
+
+
+            <div className="detail-row">
+
+              <Clock3 size={17} />
+
+              <span>
+
+                {photo.taken
+
+                  ? new Date(
+                      photo.taken
+                    ).toLocaleDateString(
+                      'en-US',
+                      {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      }
+                    )
+
+                  : 'Date not provided'
+                }
+
+              </span>
+
             </div>
-            <RecoveredInput onAdd={addRecoveredClue}/>
-            <div className="panel-actions">
-              <button className="secondary small" onClick={()=>runMemorySearch(query,clues,'manual_refinement')} disabled={busy}><Sparkles size={15}/> Apply clues</button>
-              <button className="secondary small" onClick={undo} disabled={history.length<2}><Undo2 size={15}/> Undo</button>
+
+
+            <div className="detail-row">
+
+              <MapPin size={17} />
+
+              <span>
+
+                {photo.place ||
+                  'Location not provided'}
+
+              </span>
+
             </div>
-            <div className="model-status">
-              <span className="status-dot ai"/><div><strong>Retrieval engine</strong><span>{progress?.label || modelStatus}</span></div>
-            </div>
+
+
+            {memoryMode && (
+
+              <>
+
+
+                <div className="why">
+
+
+                  <strong>
+                    Why this may match
+                  </strong>
+
+
+                  <div className="match-tags">
+
+
+                    {matched.map(
+                      item => (
+
+                        <span key={item}>
+
+                          <Check size={13} />
+
+                          {item}
+
+                        </span>
+
+                      )
+                    )}
+
+
+                  </div>
+
+
+                  <p>
+
+                    Visual match signals are model inference;
+                    date/place shown above are demo metadata.
+
+                  </p>
+
+
+                </div>
+
+
+                <button
+                  className="primary full"
+                  onClick={() =>
+                    onConfirm(photo)
+                  }
+                >
+
+                  <Check size={18} />
+
+                  Yes — this is the photo
+
+                </button>
+
+
+                <button
+                  className="secondary full"
+                  onClick={() =>
+                    onMoreLike(photo)
+                  }
+                >
+
+                  <Images size={18} />
+
+                  More like this
+
+                </button>
+
+
+              </>
+
+            )}
+
+
           </aside>
 
-          <div className="candidate-area">
-            <div className="candidate-head">
-              <div><p className="eyebrow">CANDIDATES</p><h2>{results.length ? 'Possible matches' : 'Ready to search'}</h2></div>
-              {results.length>0 && <div className="candidate-meta"><Eye size={16}/>{task.photosOpened.length} inspected</div>}
-            </div>
 
-            {clarification && <div className="clarification">
-              <div className="clarification-icon"><CircleHelp size={20}/></div>
-              <div><strong>{clarification.question}</strong><p>Answer only if you remember. “Not sure” keeps the search broad.</p>
-                <div className="answer-row">{clarification.options.map(o=><button key={o} onClick={()=>answerQuestion(o)}>{o}</button>)}</div>
-              </div>
-              <button className="icon-btn" onClick={()=>setClarification(null)}><X size={16}/></button>
-            </div>}
+        </div>
 
-            {results.length>0 && <>
-              <div className="ranked-grid">{results.slice(0,16).map((p,i)=><PhotoCard key={p.id} photo={p} rank={i+1} score={p.score} onClick={()=>openPhoto(p)} showBadge={!!p.duplicateOf}/>)}</div>
-              <div className="no-match">
-                <div><strong>Still not seeing it?</strong><p>No confirmed match only means it was not found in this demo collection yet.</p></div>
-                <button className="secondary" onClick={endNoMatch}>End as no confirmed match</button>
-              </div>
-            </>}
-          </div>
-        </div>}
-      </section>}
-    </main>
 
-    {selected && <PhotoModal photo={selected} query={view==='memory' ? `${query} ${activeText}`:baseline} memoryMode={view==='memory'&&!!task}
-      onClose={()=>setSelected(null)} onConfirm={confirmTarget} onMoreLike={visualRefine}/>}
-
-    {showSession && task && <SessionModal task={task} onClose={()=>setShowSession(false)} onExport={exportSession} onReset={resetTask}/>}
-  </div>
-}
-
-function RecoveredInput({onAdd}) {
-  const [value,setValue]=useState('')
-  const [certainty,setCertainty]=useState('certain')
-  return <div className="recovered-box">
-    <label>Seeing results reminded me…</label>
-    <input value={value} onChange={e=>setValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&value.trim()){onAdd(value,certainty);setValue('')}}} placeholder="e.g. there was a yellow sign"/>
-    <div className="recovered-actions">
-      <select value={certainty} onChange={e=>setCertainty(e.target.value)}><option value="certain">Certain</option><option value="approximate">Approximate</option><option value="guess">Guess</option></select>
-      <button onClick={()=>{if(value.trim()){onAdd(value,certainty);setValue('')}}}>Add clue</button>
-    </div>
-  </div>
-}
-
-function PhotoCard({photo,onClick,rank,score,showBadge}) {
-  return <button className="photo-card" onClick={onClick}>
-    <img src={photo.url} alt={photo.title} loading="lazy"/>
-    {rank && <span className="rank">#{rank}</span>}
-    {showBadge && <span className="similar-badge"><Layers3 size={12}/> similar</span>}
-    {score!==undefined && <span className="score">{Math.round(score*100)}%</span>}
-    <div className="photo-caption"><strong>{photo.title}</strong><span>{photo.place || 'Project library'}</span></div>
-  </button>
-}
-
-function PhotoModal({photo,onClose,onConfirm,onMoreLike,memoryMode,query}) {
-  const matched=explanation(query,photo)
-  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
-    <div className="photo-modal">
-      <div className="modal-top"><button className="secondary small" onClick={onClose}><ChevronLeft size={17}/> Back</button><span>{photo.title}</span><button className="icon-btn" onClick={onClose}><X size={18}/></button></div>
-      <div className="photo-modal-body">
-        <div className="large-photo"><img src={photo.url} alt={photo.title}/></div>
-        <aside className="photo-info">
-          <p className="eyebrow">PHOTO DETAILS</p><h2>{photo.title}</h2>
-          <div className="detail-row"><Clock3 size={17}/><span>{photo.taken ? new Date(photo.taken).toLocaleDateString('en-US',{day:'numeric',month:'long',year:'numeric'}) : 'Date not provided'}</span></div>
-          <div className="detail-row"><MapPin size={17}/><span>{photo.place || 'Location not provided'}</span></div>
-          {memoryMode && <>
-            <div className="why"><strong>Why this may match</strong><div className="match-tags">{matched.map(x=><span key={x}><Check size={13}/>{x}</span>)}</div><p>Visual match signals are model inference; date/place shown above are demo metadata.</p></div>
-            <button className="primary full" onClick={()=>onConfirm(photo)}><Check size={18}/> Yes — this is the photo</button>
-            <button className="secondary full" onClick={()=>onMoreLike(photo)}><Images size={18}/> More like this</button>
-          </>}
-        </aside>
       </div>
+
+
     </div>
-  </div>
+
+  )
 }
 
-function SessionModal({task,onClose,onExport,onReset}) {
-  const elapsed=task.elapsedMs || Date.now()-task.startedMs
-  return <div className="modal-backdrop">
-    <div className="session-modal">
-      <div className="success-icon">{task.outcome==='confirmed'?<Check size={30}/>:<Search size={28}/>}</div>
-      <p className="eyebrow">TEST SESSION</p>
-      <h2>{task.outcome==='confirmed'?'Photo confirmed':'Search ended'}</h2>
-      <p className="muted">{task.outcome==='confirmed'?'The task is recorded as a confirmed retrieval.':'No confirmed match was found in this demo collection.'}</p>
-      <div className="metric-grid">
-        <Metric label="Time" value={seconds(elapsed)}/>
-        <Metric label="Photos inspected" value={task.photosOpened.length}/>
-        <Metric label="Refinements" value={task.refinements.length}/>
-        <Metric label="AI questions" value={task.questions.length}/>
+
+/* =========================================================
+   TEST SESSION MODAL
+   ========================================================= */
+
+function SessionModal({
+  task,
+  onClose,
+  onExport,
+  onReset
+}) {
+
+  const elapsed =
+    task.elapsedMs ||
+    Date.now() -
+      task.startedMs
+
+
+  return (
+
+    <div className="modal-backdrop">
+
+
+      <div className="session-modal">
+
+
+        <div className="success-icon">
+
+          {task.outcome === 'confirmed'
+
+            ? (
+                <Check size={30} />
+              )
+
+            : (
+                <Search size={28} />
+              )
+          }
+
+        </div>
+
+
+        <p className="eyebrow">
+          TEST SESSION
+        </p>
+
+
+        <h2>
+
+          {task.outcome === 'confirmed'
+            ? 'Photo confirmed'
+            : 'Search ended'
+          }
+
+        </h2>
+
+
+        <p className="muted">
+
+          {task.outcome === 'confirmed'
+
+            ? 'The task is recorded as a confirmed retrieval.'
+
+            : 'No confirmed match was found in this demo collection.'
+          }
+
+        </p>
+
+
+        <div className="metric-grid">
+
+
+          <Metric
+            label="Time"
+            value={
+              seconds(elapsed)
+            }
+          />
+
+
+          <Metric
+            label="Photos inspected"
+            value={
+              task.photosOpened.length
+            }
+          />
+
+
+          <Metric
+            label="Refinements"
+            value={
+              task.refinements.length
+            }
+          />
+
+
+          <Metric
+            label="AI questions"
+            value={
+              task.questions.length
+            }
+          />
+
+
+        </div>
+
+
+        <div className="session-actions">
+
+
+          <button
+            className="secondary"
+            onClick={onExport}
+          >
+
+            <Download size={17} />
+
+            Export session JSON
+
+          </button>
+
+
+          <button
+            className="primary"
+            onClick={onReset}
+          >
+
+            <RotateCcw size={17} />
+
+            Start another task
+
+          </button>
+
+
+        </div>
+
+
+        <button
+          className="text-btn"
+          onClick={onClose}
+        >
+
+          Keep viewing this session
+
+        </button>
+
+
       </div>
-      <div className="session-actions"><button className="secondary" onClick={onExport}><Download size={17}/> Export session JSON</button><button className="primary" onClick={onReset}><RotateCcw size={17}/> Start another task</button></div>
-      <button className="text-btn" onClick={onClose}>Keep viewing this session</button>
+
+
     </div>
-  </div>
+
+  )
 }
 
-function Metric({label,value}) { return <div className="metric"><strong>{value}</strong><span>{label}</span></div> }
+
+/* =========================================================
+   METRIC COMPONENT
+   ========================================================= */
+
+function Metric({
+  label,
+  value
+}) {
+
+  return (
+
+    <div className="metric">
+
+      <strong>
+        {value}
+      </strong>
+
+      <span>
+        {label}
+      </span>
+
+    </div>
+
+  )
+}
+
 
 export default App
